@@ -27,6 +27,8 @@ pub struct ReplayData {
     pub stage_spacing: f64,
     #[serde(default = "default_scale")]
     pub stage_scale: f64,
+    #[serde(default)]
+    pub no_sv: bool,
     pub player_name: String, pub date: String,
     pub events: Vec<ReplayEvent>,
     pub score: u32, pub acc: f64, pub max_combo: u32,
@@ -40,6 +42,7 @@ pub struct ReplayRecorder {
     scroll_speed: f64, hit_position: f64,
     mirror_mode: bool, global_offset: f64,
     stage_spacing: f64, stage_scale: f64,
+    no_sv: bool,
     player_name: String, events: Vec<ReplayEvent>,
 }
 
@@ -49,11 +52,12 @@ impl ReplayRecorder {
         scroll_speed: f64, hit_position: f64,
         mirror_mode: bool, global_offset: f64,
         stage_spacing: f64, stage_scale: f64,
+        no_sv: bool,
         player_name: &str,
     ) -> Self {
         Self { map_path: map_path.to_string(), song_rate, od,
             scroll_speed, hit_position, mirror_mode, global_offset,
-            stage_spacing, stage_scale,
+            stage_spacing, stage_scale, no_sv,
             player_name: player_name.to_string(), events: Vec::new() }
     }
 
@@ -72,6 +76,7 @@ impl ReplayRecorder {
             scroll_speed: self.scroll_speed, hit_position: self.hit_position,
             mirror_mode: self.mirror_mode, global_offset: self.global_offset,
             stage_spacing: self.stage_spacing, stage_scale: self.stage_scale,
+            no_sv: self.no_sv,
             player_name: self.player_name,
             date: format!("{:04}-{:02}-{:02} {:02}:{:02}", y, mo, d, h, m),
             events: self.events, score, acc, max_combo, counts, total_notes }
@@ -135,6 +140,7 @@ impl ReplayData {
             #[serde(default)] total_notes: u32,
             #[serde(default = "default_spacing")] stage_spacing: f64,
             #[serde(default = "default_scale")] stage_scale: f64,
+            #[serde(default)] no_sv: bool,
         }
 
         let py: PyReplay = serde_json::from_str(json)
@@ -177,6 +183,7 @@ impl ReplayData {
             global_offset: py.global_offset,
             stage_spacing: py.stage_spacing,
             stage_scale: py.stage_scale,
+            no_sv: py.no_sv,
             player_name: py.player_name,
             date: py.date,
             events,

@@ -30,6 +30,7 @@ pub struct ReplayEngine {
     song_rate: f64,
     map_offset: f64,
     eff_speed: f64,
+    no_sv: bool,
     windows: JudgmentWindows,
 
     score: Score,
@@ -84,13 +85,14 @@ impl ReplayEngine {
         let note_w = (80.0 * replay.stage_scale) as f32;
         let lanes = calc_lanes(sw, replay.stage_spacing, replay.stage_scale);
         let eff_speed = scroll_speed / 24.0 / song_rate;
+        let no_sv = replay.no_sv;
 
         let mut notes: Vec<NoteRT> = bnotes
             .into_iter()
             .map(|n| NoteRT {
                 time: n.time, end_time: n.end_time, lane: n.lane,
                 note_type: n.note_type, hit: false, missed: false,
-                holding: false, ghost: false, stuck_y: None, release_time: None,
+                holding: false, ghost: false, stuck_y: None, release_time: None, sv: n.sv,
             })
             .collect();
 
@@ -121,7 +123,7 @@ impl ReplayEngine {
             events, event_idx: 0, audio, render, window,
             notes, active_idx: 0, total_duration, replay,
             start_time: Instant::now(), song_rate,
-            map_offset: meta.offset, eff_speed, windows,
+            map_offset: meta.offset, eff_speed, no_sv, windows,
             score: Score { total_notes, ..Default::default() },
             keys_pressed: [false; 4],
             judgment_type: None, burst_start: None,
@@ -378,7 +380,7 @@ impl ReplayEngine {
             } else {
                 match n.note_type {
                     NoteType::Tap => { n.hit = true; }
-                    NoteType::Hold => { n.holding = true; n.stuck_y = Some(note_y(n.time, ct, self.hit_y, self.eff_speed)); }
+                    NoteType::Hold => { n.holding = true; let note_sv = if self.no_sv { 1.0 } else { n.sv }; n.stuck_y = Some(note_y(n.time, ct, self.hit_y, self.eff_speed * note_sv)); }
                 }
             }
             self.judgment_type = Some(result);
@@ -406,7 +408,8 @@ impl ReplayEngine {
         while self.active_idx < self.notes.len() {
             let n = &self.notes[self.active_idx];
             let nt = n.end_time.max(n.time);
-            if (n.hit || n.missed) && (ct - nt) * self.eff_speed > 300.0 { self.active_idx += 1; }
+            let ns = if self.no_sv { self.eff_speed } else { self.eff_speed * n.sv };
+            if (n.hit || n.missed) && (ct - nt) * ns > 300.0 { self.active_idx += 1; }
             else { break; }
         }
     }
@@ -452,6 +455,7 @@ impl ReplayEngine {
         {
             let result = process_notes(
                 &mut self.notes, &mut self.active_idx, ct, self.eff_speed,
+                self.no_sv,
                 self.windows.miss, self.hit_y, self.note_w,
                 &self.lanes, &mut self.render.quad,
                 self.skin_regions.as_ref(), &mut self.score,

@@ -15,5 +15,6 @@
   "hit_position": 553.0,
   "active_skin": "A",
   "od": 8.999999999999996,
-  "mirror_mode": false
+  "mirror_mode": false,
+  "no_sv": false
 }

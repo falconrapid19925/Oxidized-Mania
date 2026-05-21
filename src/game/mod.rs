@@ -22,4 +22,5 @@ pub struct NoteRT {
     pub ghost: bool,
     pub stuck_y: Option<f64>,
     pub release_time: Option<f64>,
+    pub sv: f64,
 }

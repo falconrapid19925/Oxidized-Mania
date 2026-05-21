@@ -51,6 +51,7 @@ pub fn process_notes(
     active_idx: &mut usize,
     current_time: f64,
     eff_speed: f64,
+    no_sv: bool,
     miss_window: f64,
     hit_y: f64,
     note_w: f32,
@@ -63,7 +64,8 @@ pub fn process_notes(
     while *active_idx < notes.len() {
         let n = &notes[*active_idx];
         let nt = if n.note_type == NoteType::Hold { n.end_time } else { n.time };
-        if (n.hit || n.missed) && (current_time - nt) * eff_speed > 300.0 {
+        let ns = if no_sv { eff_speed } else { eff_speed * n.sv };
+        if (n.hit || n.missed) && (current_time - nt) * ns > 300.0 {
             *active_idx += 1;
         } else { break; }
     }
@@ -74,7 +76,8 @@ pub fn process_notes(
 
     for i in *active_idx..notes.len() {
         // 远跳中断 (对标 Python: if (note.time - current_time) * eff_speed > SCREEN_H + 100)
-        if (notes[i].time - current_time) * eff_speed > SCREEN_H as f64 + 100.0 { break; }
+        let ns = if no_sv { eff_speed } else { eff_speed * notes[i].sv };
+        if (notes[i].time - current_time) * ns > SCREEN_H as f64 + 100.0 { break; }
 
         // 底漏检测 (对标 Python 1064-1093)
         match notes[i].note_type {
@@ -109,10 +112,11 @@ pub fn process_notes(
 
         let lane = notes[i].lane;
         let lx = lanes[lane];
+        let ns = if no_sv { eff_speed } else { eff_speed * notes[i].sv };
 
         match notes[i].note_type {
             NoteType::Tap => {
-                let y = note_y(notes[i].time, current_time, hit_y, eff_speed) as f32;
+                let y = note_y(notes[i].time, current_time, hit_y, ns) as f32;
                 if y > -50.0 && y < SCREEN_H {
                     let alpha: u8 = if notes[i].missed { 80 } else { 255 };
                     let mut used = draw_skin_element(quad, skin_regions, NOTE_D[lane], NOTE_[lane], lx, y, note_w, alpha);
@@ -127,8 +131,8 @@ pub fn process_notes(
                 }
             }
             NoteType::Hold => {
-                let head_y = calc_hold_head_y(&notes[i], current_time, hit_y, eff_speed);
-                let tail_y = note_y(notes[i].end_time, current_time, hit_y, eff_speed) as f32;
+                let head_y = calc_hold_head_y(&notes[i], current_time, hit_y, ns);
+                let tail_y = note_y(notes[i].end_time, current_time, hit_y, ns) as f32;
                 let rect_h = head_y as i32 - tail_y as i32;
                 if rect_h > 0 && tail_y < SCREEN_H && head_y > -50.0 {
                     let alpha: u8 = if notes[i].holding { 255 } else if notes[i].missed { 80 } else { 200 };

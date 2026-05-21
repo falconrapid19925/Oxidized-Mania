@@ -14,9 +14,8 @@ mod game; mod history; mod menu; mod pp; mod render; mod replay; mod replay_view
 mod skin; mod sonic; mod ui;
 
 /// 倍速改变时刷新当前文件夹所有难度的星数和难度标签
-fn refresh_diffs_for_rate(state: &mut SongSelectState, config: &GameConfig) {
-    let folder_idx = state.folder_idx;
-    if let Some(folder) = state.folders.get_mut(folder_idx) {
+fn refresh_diffs_for_rate(folders: &mut [FolderMeta], config: &GameConfig) {
+    for folder in folders.iter_mut() {
         for (di, json) in folder.jsons.iter().enumerate() {
             if let Some(diff) = folder.diffs.get_mut(di) {
                 diff.stars = crate::pp::calculate_stars(json, config.song_rate);
@@ -166,10 +165,11 @@ fn main() {
     }
     let extra_chars = menu::collect_ui_chars(&songs);
     let gpu = pollster::block_on(render::context::GpuContext::new(&window));
-    event_loop.run_app(&mut App { state: AppState::Splash { cover_regions: vec![], cover_idx: 0, cycle_start: std::time::Instant::now() - std::time::Duration::from_secs(10) }, window, render: None, gpu, config, input: InputState::default(), extra_chars, pending_cover: None, cover_paths, folders_cache, shift_held: false, prev_folder_idx: 0, prev_diff_idx: 0 }).unwrap();
+    let init_rate = config.song_rate;
+    event_loop.run_app(&mut App { state: AppState::Splash { cover_regions: vec![], cover_idx: 0, cycle_start: std::time::Instant::now() - std::time::Duration::from_secs(10) }, window, render: None, gpu, config, input: InputState::default(), extra_chars, pending_cover: None, cover_paths, folders_cache, shift_held: false, prev_folder_idx: 0, prev_diff_idx: 0, cached_rate: init_rate }).unwrap();
 }
 
-struct App { state: AppState, window: Arc<Window>, render: Option<RenderCtx>, gpu: render::context::GpuContext, config: GameConfig, input: InputState, extra_chars: Vec<char>, pending_cover: Option<String>, cover_paths: Vec<String>, folders_cache: Vec<FolderMeta>, shift_held: bool, prev_folder_idx: usize, prev_diff_idx: usize }
+struct App { state: AppState, window: Arc<Window>, render: Option<RenderCtx>, gpu: render::context::GpuContext, config: GameConfig, input: InputState, extra_chars: Vec<char>, pending_cover: Option<String>, cover_paths: Vec<String>, folders_cache: Vec<FolderMeta>, cached_rate: f64, shift_held: bool, prev_folder_idx: usize, prev_diff_idx: usize }
 
 impl App {
     fn init_render(&mut self) {
@@ -412,7 +412,7 @@ impl App {
                     if let Some(idx) = clicked_tab {
                         match idx {
                             0 => { let empty = vec![]; self.render = None; self.state = AppState::MainMenu { tab: MainMenuTab::Play, cover_regions: empty, cover_idx: 0, cycle_start: std::time::Instant::now() - std::time::Duration::from_secs(10), config: config.clone() }; return; }
-                            1 => { let state = SongSelectState::new(self.folders_cache.clone(), config.clone()); self.render = None; self.state = AppState::SongSelect { state, config: config.clone() }; return; }
+                            1 => { if (self.cached_rate - config.song_rate).abs() > 0.001 { self.config.song_rate = config.song_rate; refresh_diffs_for_rate(&mut self.folders_cache, &self.config); self.cached_rate = config.song_rate; } let state = SongSelectState::new(self.folders_cache.clone(), config.clone()); self.render = None; self.state = AppState::SongSelect { state, config: config.clone() }; return; }
                             _ => {}
                         }
                     }
@@ -687,7 +687,7 @@ impl App {
                     let json = folder.jsons[diff_idx].clone();
                     if let Ok((meta, bnotes)) = load_beatmap_rox(&json) {
                         let sname = meta.song.clone();
-                        let rnotes: Vec<NoteRT> = bnotes.into_iter().map(|n| NoteRT { time: n.time, end_time: n.end_time, lane: n.lane, note_type: n.note_type, hit: false, missed: false, holding: false, ghost: false, stuck_y: None, release_time: None }).collect();
+                        let rnotes: Vec<NoteRT> = bnotes.into_iter().map(|n| NoteRT { time: n.time, end_time: n.end_time, lane: n.lane, note_type: n.note_type, hit: false, missed: false, holding: false, ghost: false, stuck_y: None, release_time: None, sv: n.sv }).collect();
                         let mut audio = BassAudio::init().unwrap();
                         let parent_dir = Path::new(&json).parent().unwrap();
                         let _ = load_audio_with_rate(&mut audio, &sname, parent_dir, config.song_rate as f32);
@@ -707,8 +707,8 @@ impl App {
                 KeyCode::Period => { config.scroll_speed += 0.5; }
                 KeyCode::KeyA => config.global_offset -= 5.0,
                 KeyCode::KeyD => config.global_offset += 5.0,
-                KeyCode::KeyW => { config.song_rate = (config.song_rate - 0.1).max(0.5); refresh_diffs_for_rate(state, config); }
-                KeyCode::KeyE => { config.song_rate = (config.song_rate + 0.1).min(2.0); refresh_diffs_for_rate(state, config); }
+                KeyCode::KeyW => { config.song_rate = (config.song_rate - 0.1).max(0.5); refresh_diffs_for_rate(&mut state.folders, config); self.folders_cache = state.folders.clone(); }
+                KeyCode::KeyE => { config.song_rate = (config.song_rate + 0.1).min(2.0); refresh_diffs_for_rate(&mut state.folders, config); self.folders_cache = state.folders.clone(); }
                 KeyCode::KeyF => config.fullscreen = !config.fullscreen,
                 KeyCode::KeyI => {
                     let json = state.current_folder().jsons[state.diff_idx].clone();
@@ -910,7 +910,7 @@ impl App {
                     let path = song.jsons[*diff].clone();
                     if let Ok((meta, bnotes)) = load_beatmap_rox(&path) {
                         let sname = meta.song.clone();
-                        let rnotes: Vec<NoteRT> = bnotes.into_iter().map(|n| NoteRT { time: n.time, end_time: n.end_time, lane: n.lane, note_type: n.note_type, hit: false, missed: false, holding: false, ghost: false, stuck_y: None, release_time: None }).collect();
+                        let rnotes: Vec<NoteRT> = bnotes.into_iter().map(|n| NoteRT { time: n.time, end_time: n.end_time, lane: n.lane, note_type: n.note_type, hit: false, missed: false, holding: false, ghost: false, stuck_y: None, release_time: None, sv: n.sv }).collect();
                         let mut audio = BassAudio::init().unwrap();
                         let parent_dir = Path::new(&path).parent().unwrap();
                         let _ = load_audio_with_rate(&mut audio, &sname, parent_dir, config.song_rate as f32);
@@ -983,7 +983,7 @@ impl App {
                         KeyCode::KeyR => {
                             if let Ok((meta, bnotes)) = load_beatmap_rox(&result.map_path) {
                                 let sname = meta.song.clone();
-                                let rnotes: Vec<NoteRT> = bnotes.into_iter().map(|n| NoteRT { time: n.time, end_time: n.end_time, lane: n.lane, note_type: n.note_type, hit: false, missed: false, holding: false, ghost: false, stuck_y: None, release_time: None }).collect();
+                                let rnotes: Vec<NoteRT> = bnotes.into_iter().map(|n| NoteRT { time: n.time, end_time: n.end_time, lane: n.lane, note_type: n.note_type, hit: false, missed: false, holding: false, ghost: false, stuck_y: None, release_time: None, sv: n.sv }).collect();
                                 let mut audio = BassAudio::init().unwrap();
                                 let parent_dir = Path::new(&result.map_path).parent().unwrap();
                                 let _ = load_audio_with_rate(&mut audio, &sname, parent_dir, config.song_rate as f32);
@@ -1031,6 +1031,15 @@ impl App {
             AppState::ExitConfirm => match key { KeyCode::Enter => el.exit(), KeyCode::Escape => { self.render = None; next = Some(AppState::Splash { cover_regions: vec![], cover_idx: 0, cycle_start: std::time::Instant::now() - std::time::Duration::from_secs(10) }); } _ => {} },
             _ => {}
         }
+        // 进入选歌界面前，若倍速有变则刷新星数和难度
+        if let Some(AppState::SongSelect { ref mut state, ref config } ) = &mut next {
+            if (self.cached_rate - config.song_rate).abs() > 0.001 {
+                self.config.song_rate = config.song_rate;
+                refresh_diffs_for_rate(&mut self.folders_cache, &self.config);
+                self.cached_rate = config.song_rate;
+                state.folders = self.folders_cache.clone();
+            }
+        }
         let to_results = matches!(next, Some(AppState::Results { .. }));
         if let Some(s) = next { self.state = s; }
         if to_results { self.window.request_redraw(); }
@@ -1048,6 +1057,7 @@ fn settings_activate(primary: &mut usize, secondary: &mut usize, binding_idx: &m
             1 => { let v = config.od; *adjuster = Some(Adjuster { label: "OD 判定精度", value: v, min: 0.0, max: 11.0, step: 0.1, setter: |c, val| c.od = val }); }
             2 => { let v = config.hit_position; *adjuster = Some(Adjuster { label: "判定线位置", value: v, min: 300.0, max: 580.0, step: 5.0, setter: |c, val| c.hit_position = val }); }
             5 => config.mirror_mode = !config.mirror_mode,
+            6 => config.no_sv = !config.no_sv,
             _ => {}
         },
         2 => { *binding_idx = Some(*secondary); }
@@ -1076,6 +1086,7 @@ fn settings_shortcut(config: &mut GameConfig, key: KeyCode, shift: bool) {
         KeyCode::KeyN => config.stage_scale = (config.stage_scale - 0.1).max(0.5),
         KeyCode::Comma => config.stage_scale = (config.stage_scale + 0.1).min(2.0),
         KeyCode::KeyB => config.mirror_mode = !config.mirror_mode,
+        KeyCode::KeyV => config.no_sv = !config.no_sv,
         KeyCode::KeyA => config.global_offset -= 5.0,
         KeyCode::KeyD => config.global_offset += 5.0,
         KeyCode::KeyW => config.song_rate = (config.song_rate - 0.1).max(0.5),

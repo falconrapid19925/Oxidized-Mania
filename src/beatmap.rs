@@ -52,6 +52,7 @@ pub struct Note {
     pub holding: bool,
     pub stuck_y: Option<f64>,
     pub release_time: Option<f64>,
+    pub sv: f64,
 }
 
 pub fn load_beatmap(json_path: &str) -> Result<(BeatmapMeta, Vec<Note>), String> {
@@ -70,6 +71,7 @@ pub fn load_beatmap(json_path: &str) -> Result<(BeatmapMeta, Vec<Note>), String>
                 holding: false,
                 stuck_y: None,
                 release_time: None,
+                sv: 1.0,
             },
             NoteDef::Hold {
                 time,
@@ -85,6 +87,7 @@ pub fn load_beatmap(json_path: &str) -> Result<(BeatmapMeta, Vec<Note>), String>
                 holding: false,
                 stuck_y: None,
                 release_time: None,
+                sv: 1.0,
             },
         })
         .collect();
@@ -120,13 +123,29 @@ pub fn load_beatmap_rox(path: &str) -> Result<(BeatmapMeta, Vec<Note>), String> 
         bpm: chart.timing_points.iter().find(|t| !t.is_inherited).map(|t| t.bpm as f64).unwrap_or(0.0),
     };
 
+    // 从继承 TimingPoint 构建 SV 时间线
+    let mut sv_timeline: Vec<(f64, f32)> = chart.timing_points.iter()
+        .filter(|t| t.is_inherited)
+        .map(|t| (t.time_us as f64 / 1000.0, t.scroll_speed))
+        .collect();
+    sv_timeline.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+    if sv_timeline.is_empty() || sv_timeline[0].0 > 0.0 {
+        sv_timeline.insert(0, (0.0, 1.0));
+    }
+
     let notes: Vec<Note> = chart.notes.iter().map(|n| {
+        let note_time_ms = n.time_us as f64 / 1000.0;
+        let active_sv = sv_timeline.iter().rev()
+            .find(|(t, _)| *t <= note_time_ms)
+            .map(|(_, sv)| *sv)
+            .unwrap_or(1.0);
         let (note_type, et) = match n.note_type {
             RoxNoteType::Hold { duration_us } => (NoteType::Hold, (n.time_us + duration_us) as f64 / 1000.0),
             _ => (NoteType::Tap, n.time_us as f64 / 1000.0),
         };
-        Note { time: n.time_us as f64 / 1000.0, end_time: et, lane: n.column as usize, note_type,
-            hit: false, missed: false, holding: false, stuck_y: None, release_time: None }
+        Note { time: note_time_ms, end_time: et, lane: n.column as usize, note_type,
+            hit: false, missed: false, holding: false, stuck_y: None, release_time: None,
+            sv: active_sv as f64 }
     }).collect();
 
     Ok((meta, notes))

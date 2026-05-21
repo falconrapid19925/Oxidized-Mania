@@ -97,6 +97,7 @@ pub fn secondary_items(primary: usize, config: &GameConfig, spect_config: Option
             ("轨道间距", format!("{:.0}px", config.stage_spacing)),
             ("舞台缩放", format!("{:.2}x", config.stage_scale)),
             ("镜像模式", if config.mirror_mode { "开".into() } else { "关".into() }),
+            ("SV 变化", if config.no_sv { "忽略".into() } else { "启用".into() }),
         ],
         1 => vec![
             ("播放倍速", format!("{:.2}x", config.song_rate)),
@@ -131,5 +132,5 @@ pub fn secondary_items(primary: usize, config: &GameConfig, spect_config: Option
 }
 
 pub fn secondary_count(primary: usize) -> usize {
-    match primary { 0 => 6, 1 => 2, 2 => 4, 3 => 2, 4 => 2, 5 => 8, _ => 0 }
+    match primary { 0 => 7, 1 => 2, 2 => 4, 3 => 2, 4 => 2, 5 => 8, _ => 0 }
 }

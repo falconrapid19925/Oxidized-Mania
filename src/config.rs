@@ -26,6 +26,8 @@ pub struct GameConfig {
     pub od: f64,
     #[serde(default)]
     pub mirror_mode: bool,
+    #[serde(default)]
+    pub no_sv: bool,
 }
 
 fn default_scroll_speed() -> f64 { 0.6 }
@@ -45,7 +47,7 @@ impl Default for GameConfig {
             show_fps: false, fullscreen: true,
             stage_spacing: 100.0, stage_scale: 1.0,
             hit_position: 500.0, active_skin: String::new(),
-            od: 5.0, mirror_mode: false,
+            od: 5.0, mirror_mode: false, no_sv: false,
         }
     }
 }

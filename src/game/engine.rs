@@ -183,7 +183,7 @@ impl GameEngine {
             let mirror_map = [3usize, 2, 1, 0];
             for n in &mut notes { n.lane = mirror_map[n.lane]; }
         }
-        let rec = crate::replay::ReplayRecorder::new(&map_path, song_rate, od, config.scroll_speed, config.hit_position, mirror_mode, config.global_offset, config.stage_spacing, config.stage_scale, "Player");
+        let rec = crate::replay::ReplayRecorder::new(&map_path, song_rate, od, config.scroll_speed, config.hit_position, mirror_mode, config.global_offset, config.stage_spacing, config.stage_scale, config.no_sv, "Player");
         let stars = crate::pp::calculate_stars(&map_path, song_rate);
         Self {
             recorder: Some(rec), replay_data: None,
@@ -288,8 +288,9 @@ impl GameEngine {
                     self.notes[idx].hit = true;
                 } else if self.notes[idx].note_type == NoteType::Hold {
                     self.notes[idx].holding = true;
+                    let note_sv = if self.config.no_sv { 1.0 } else { self.notes[idx].sv };
                     self.notes[idx].stuck_y =
-                        Some(self.hit_y - (self.notes[idx].time - ct) * self.eff_speed);
+                        Some(self.hit_y - (self.notes[idx].time - ct) * self.eff_speed * note_sv);
                 }
             }
             self.last_judgment = Some((result, Instant::now()));
@@ -435,6 +436,7 @@ impl GameEngine {
                 {
                     let result = process_notes(
                         &mut self.notes, &mut self.active_idx, ct, self.eff_speed,
+                        self.config.no_sv,
                         self.windows.miss, self.hit_y, self.note_w,
                         &self.lanes, &mut self.render.quad,
                         self.skin_regions.as_ref(), &mut self.score,
