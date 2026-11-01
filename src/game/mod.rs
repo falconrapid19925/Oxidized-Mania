@@ -2,6 +2,7 @@ pub mod engine;
 pub mod hud;
 pub mod judgment;
 pub mod notes;
+pub mod note_index;
 pub mod pause;
 pub mod results;
 pub mod scoring;
