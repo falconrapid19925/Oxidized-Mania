@@ -26,6 +26,7 @@ zstd = "0.13"
 
 [features]
 dhat-heap = []
+frame-profiler = []
 
 [profile.release]
 debug = 1

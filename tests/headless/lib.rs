@@ -3,3 +3,5 @@
 pub mod config;
 #[path = "../../src/chart_timing.rs"]
 pub mod chart_timing;
+#[path = "../../src/game/note_index.rs"]
+pub mod note_index;

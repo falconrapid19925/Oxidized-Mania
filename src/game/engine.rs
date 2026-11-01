@@ -18,10 +18,12 @@ use super::notes::{
 };
 use super::results::{GameResult, standardized_score, render_results};
 use super::scoring::Score;
+use super::note_index::HoldNoteIndex;
 use super::{NoteRT, NoteType};
 
 // ─── 性能分析器 ───
 
+#[cfg(feature = "frame-profiler")]
 struct FrameProfiler {
     frame_times: Vec<f64>,
     report_interval: usize,
@@ -32,6 +34,7 @@ struct FrameProfiler {
     glyph_count: usize,
 }
 
+#[cfg(feature = "frame-profiler")]
 impl FrameProfiler {
     fn new() -> Self {
         Self {
@@ -59,8 +62,7 @@ impl FrameProfiler {
         if self.frame_times.len() > self.report_interval { self.frame_times.remove(0); }
 
         // 性能报告
-        const PERF_REPORT: bool = false;
-        if PERF_REPORT && self.frame_count % self.report_interval as u64 == 0 && !self.frame_times.is_empty() {
+        if self.frame_count % self.report_interval as u64 == 0 && !self.frame_times.is_empty() {
             let avg = self.frame_times.iter().sum::<f64>() / self.frame_times.len() as f64;
             let min = self.frame_times.iter().cloned().fold(f64::INFINITY, f64::min);
             let max = self.frame_times.iter().cloned().fold(0.0, f64::max);
@@ -75,6 +77,22 @@ impl FrameProfiler {
             );
         }
     }
+}
+
+// Compile out clock reads, sample storage and rolling-buffer shifts in normal builds.
+#[cfg(not(feature = "frame-profiler"))]
+#[derive(Default)]
+struct FrameProfiler {
+    quad_count: usize,
+    glyph_count: usize,
+}
+
+#[cfg(not(feature = "frame-profiler"))]
+impl FrameProfiler {
+    fn new() -> Self { Self::default() }
+    fn begin_frame(&mut self) {}
+    fn end_section(&mut self, _idx: usize) {}
+    fn end_frame(&mut self) {}
 }
 
 // ─── 游戏状态机 ───
@@ -106,6 +124,7 @@ pub struct GameEngine {
     song_name: String,
     map_path: String,
     notes: Vec<NoteRT>,
+    note_index: HoldNoteIndex,
     total_duration: f64,
     render: RenderCtx,
     window: Arc<Window>,
@@ -183,11 +202,12 @@ impl GameEngine {
             let mirror_map = [3usize, 2, 1, 0];
             for n in &mut notes { n.lane = mirror_map[n.lane]; }
         }
+        let note_index = HoldNoteIndex::new(notes.iter().map(|n| (n.lane, n.note_type == NoteType::Hold)));
         let rec = crate::replay::ReplayRecorder::new(&map_path, song_rate, od, config.scroll_speed, config.hit_position, mirror_mode, config.global_offset, config.stage_spacing, config.stage_scale, config.no_sv, "Player");
         let stars = crate::pp::calculate_stars(&map_path, song_rate);
         Self {
             recorder: Some(rec), replay_data: None,
-            audio, song_name, map_path, notes, total_duration, render, window, config,
+            audio, song_name, map_path, notes, note_index, total_duration, render, window, config,
             start_time: Instant::now(), song_rate, map_offset, global_offset,
             eff_speed: scroll_speed / 24.0 / song_rate,
             windows: JudgmentWindows::new(od, song_rate),
@@ -344,7 +364,7 @@ impl GameEngine {
         let ct = self.current_time();
 
         // 找该轨道 holding 的音符
-        for i in self.active_idx..self.notes.len() {
+        for i in self.note_index.release_candidates(lane, self.active_idx, self.notes.len()) {
             let n = &self.notes[i];
             if n.holding && n.lane == lane && !n.hit && !n.missed && !n.ghost {
                 let result = judge_hold_release(n.end_time, ct, &self.windows);
@@ -916,4 +936,3 @@ impl GameEngine {
         should_exit
     }
 }
-
