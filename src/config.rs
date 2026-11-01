@@ -64,14 +64,14 @@ impl GameConfig {
     pub fn key_to_lane(&self, key_name: &str, key_code: Option<u32>) -> Option<usize> {
         // 先尝试整数键码匹配
         if let Some(code) = key_code {
-            for (i, binding) in self.key_bindings.iter().enumerate() {
+            for (i, binding) in self.key_bindings.iter().take(4).enumerate() {
                 if let Ok(binding_code) = binding.parse::<u32>() {
                     if binding_code == code { return Some(i); }
                 }
             }
         }
         // 再尝试字符串键名匹配
-        self.key_bindings.iter().position(|k| k.eq_ignore_ascii_case(key_name))
+        self.key_bindings.iter().take(4).position(|k| k.eq_ignore_ascii_case(key_name))
     }
 
     pub fn save(&self, path: &str) {
@@ -80,4 +80,43 @@ impl GameConfig {
         }
     }
 
+}
+#[cfg(test)]
+mod tests {
+    use super::GameConfig;
+
+    #[test]
+    fn default_and_case_insensitive_bindings() {
+        let config = GameConfig::default();
+        for (lane, key) in ["D", "F", "J", "K"].iter().enumerate() {
+            assert_eq!(config.key_to_lane(key, None), Some(lane));
+        }
+        assert_eq!(config.key_to_lane("x", None), None);
+    }
+
+    #[test]
+    fn extra_named_binding_cannot_address_a_fifth_lane() {
+        let mut config = GameConfig::default();
+        config.key_bindings.push("x".into());
+        assert_eq!(config.key_to_lane("x", None), None);
+        assert_eq!(config.key_to_lane("k", None), Some(3));
+    }
+
+    #[test]
+    fn extra_numeric_binding_cannot_address_a_fifth_lane() {
+        let mut config = GameConfig::default();
+        config.key_bindings = vec!["100".into(), "102".into(), "106".into(), "107".into(), "120".into()];
+        assert_eq!(config.key_to_lane("d", Some(100)), Some(0));
+        assert_eq!(config.key_to_lane("x", Some(120)), None);
+    }
+
+    #[test]
+    fn numeric_binding_still_takes_precedence() {
+        let mut config = GameConfig::default();
+        config.key_bindings = vec!["100".into(), "d".into()];
+        assert_eq!(config.key_to_lane("d", Some(100)), Some(0));
+        assert_eq!(config.key_to_lane("d", None), Some(1));
+        config.key_bindings.clear();
+        assert_eq!(config.key_to_lane("d", Some(100)), None);
+    }
 }

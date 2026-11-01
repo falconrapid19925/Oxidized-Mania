@@ -11,7 +11,7 @@ static ALLOC: dhat::Alloc = dhat::Alloc;
 
 mod app; mod audio; mod beatmap; mod beatmap_cache; mod config; mod difficulty; mod editor;
 mod game; mod history; mod menu; mod pp; mod render; mod replay; mod replay_viewer;
-mod skin; mod sonic; mod ui;
+mod skin; mod sonic; mod ui; mod chart_timing;
 
 /// 倍速改变时刷新当前文件夹所有难度的星数和难度标签
 fn refresh_diffs_for_rate(folders: &mut [FolderMeta], config: &GameConfig) {

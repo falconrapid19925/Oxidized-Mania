@@ -135,10 +135,7 @@ pub fn load_beatmap_rox(path: &str) -> Result<(BeatmapMeta, Vec<Note>), String> 
 
     let notes: Vec<Note> = chart.notes.iter().map(|n| {
         let note_time_ms = n.time_us as f64 / 1000.0;
-        let active_sv = sv_timeline.iter().rev()
-            .find(|(t, _)| *t <= note_time_ms)
-            .map(|(_, sv)| *sv)
-            .unwrap_or(1.0);
+        let active_sv = crate::chart_timing::active_scroll_speed(&sv_timeline, note_time_ms);
         let (note_type, et) = match n.note_type {
             RoxNoteType::Hold { duration_us } => (NoteType::Hold, (n.time_us + duration_us) as f64 / 1000.0),
             _ => (NoteType::Tap, n.time_us as f64 / 1000.0),
